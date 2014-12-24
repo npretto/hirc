@@ -1,8 +1,11 @@
 package;
 
 import hirc.Client;
+import sys.io.File;
 import sys.net.Host;
 import sys.net.Socket;
+
+using StringTools;
 
 /**
  * ...
@@ -11,27 +14,56 @@ import sys.net.Socket;
 
 class Main 
 {
+	static private var client:hirc.Client;
 	
 	static function main() 
 	{
-		var client = new Client("irc.freenode.net", 6667, "haxe-client");
-		client.joinChannel("#reddit-gamdev");
-		client.sendMessage("lordkryss", "this is a test");
-		//client.sendMessage("#0x", "hi k00pa!");
-		//client.sendMessage("0x", "boobs?");
+		
+
+		client = new Client("irc.freenode.net", 6667, "haxe-client");
+		client.onMessage = function (message:Message) {
+			if (message.parsed)
+			{
+				trace(message.content);
+				if (message.command.toUpperCase() == "PRIVMSG")
+				{
+					writeToLog(message);
+				}
+			}
+			
+		};
+		client.joinChannel("#haxe-client-testing");
+		client.sendToChannel("haxe-client-testing", "this is a test using threads");
+		
 		while (true)
 		{
-			client.tick();
+			var message = Sys.stdin().readLine();
+			client.send(message);
+		};
+	}
+	
+	static private function writeToLog(message:Message) 
+	{
+		//trace('${message.params} | ${message.sender}: ${message.content}');
+		var filename:String;
+		trace('${message.params}==${client.nickname}  :  ${message.params == client.nickname}');
+		if (message.params == client.nickname)
+		{
+			filename = message.sender.substr(0, message.sender.indexOf("!"));
+		}else {
+			filename = message.params;
 		}
-		//var client = new Client("127.0.0.1",1337,"lordkryss");
-		var tcp = client.socket;
-		//while (true)
-		//{
-			//var str = tcp.input.readLine();
-			//trace(">"+str);
-			//
-		//}
+
 		
+		quickAppend('logs/$filename.txt','${message.sender}:${message.content}\n');	
+	}
+	
+	static private function quickAppend(file:String,content:String):Void 
+	{
+		var f = File.append(file);
+		f.writeString(content);
+		f.close();
+	
 	}
 	
 }

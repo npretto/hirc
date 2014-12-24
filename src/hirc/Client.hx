@@ -1,5 +1,7 @@
 package hirc;
 import haxe.Timer;
+import hirc.Client.Message;
+import neko.vm.Thread;
 import sys.net.Host;
 import sys.net.Socket;
 
@@ -9,34 +11,84 @@ using StringTools;
  * ...
  * @author 
  */
+
+ typedef Message = {
+	parsed:Bool,
+	raw:String,
+	?sender:String,
+	?command:String,
+	?params:String,
+	?content:String
+ }
+ 
 class Client
 {
 
-	/**
-	 * socket used by the class
-	 */
-	public var socket:Socket;
+	private var socket:Socket;
 	public var nickname:String;
+	public var onMessage:Message->Void;
 	
-	public function new(host:String,port:Int,nickname:String) 
+	public function new(host:String,port:Int,nickname:String,?autoTick:Bool=true) 
 	{
-		this.nickname;
+		this.nickname = nickname;
+		
 		socket = new Socket();
 		socket.connect(new Host(host), port);
-		send('NICK $nickname');
+		identify(nickname);
 		
-		send('USER $nickname localhost localhost :$nickname');
+		if (autoTick)
+		{
+			var t = Thread.create(function () {
+				while (true)
+					tick();
+			});
+		}
 	}
 	
 	public function tick()
 	{
-		var str = socket.input.readLine();
-		trace("<" + str);
-		if (str.startsWith("PING"))
+		var selected = Socket.select([socket], null, null, 0.016);
+		if (selected.read.length > 0)
 		{
-			send(str.replace("PING", "PONG"));
+			var str = selected.read[0].input.readLine();
+
+			
+			var message = parseMessage(str);
+			//trace('sender:${message.sender}');
+			//trace('command:${message.command}');
+			//trace('params:${message.params}');
+			//trace('content:${message.content}');
+			
+			if (onMessage != null)
+				onMessage(message);			
+			
+			if (str.startsWith("PING"))
+			{
+				send(str.replace("PING", "PONG"));
+			}
 		}
+	}
+	
+	public function parseMessage(msg:String):Message
+	{
+		//test it here: https://www.regex101.com/r/wK9qK2/6
+		var exp = ~/^(?:[:](\S+)?)? ?(\S+) ([^ :]*)? *:?(.*)$/i;
 		
+		if (exp.match(msg))
+		{
+			return {
+				parsed: true,
+				raw:msg,
+				sender : exp.matched(1),
+				command : exp.matched(2),
+				params : exp.matched(3),
+				content : exp.matched(4),
+			}
+		}
+		return {
+			parsed:false,
+			raw:msg,
+		}
 	}
 	
 	public function send(message:String)
@@ -52,7 +104,7 @@ class Client
 		send('JOIN $channelName');
 	}
 	
-	public function sendMessage(channel:String,message:String):Void 
+	public function sendToChannel(channel:String,message:String):Void 
 	{
 		channel = addHashSymbol(channel);
 		send('PRIVMSG $channel : $message');
@@ -73,6 +125,13 @@ class Client
 			channelName = "#" + channelName;
 		}
 		return channelName;
+	}
+	
+	function identify(nickname:String):Void 
+	{
+		send('NICK $nickname');
+		
+		send('USER $nickname localhost localhost :$nickname');
 	}
 	
 }
